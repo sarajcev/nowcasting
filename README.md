@@ -11,3 +11,5 @@ Nowcasting stands for the short-term prediction of lightning flash-cell future p
 
 ### Lightning density maps
 Lightning data is also used to create geographical lightning density maps (e.g. keraunic maps), which have been graphically displayed using the Basemap library (from the matplotlib) and folium maps. Lightning densities are computed by means of the (bivariate) kernel density estimation, using the sckit-learn library.
+
+The Jupyter Notebook can be seen rendered on nbviewer [here](https://nbviewer.jupyter.org/github/sarajcev/nowcasting/blob/master/nowcasting.ipynb)
