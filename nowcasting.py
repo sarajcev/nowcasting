@@ -568,46 +568,6 @@ print('Best Silhouette Coefficient is: {:.4f}'.format(silhouette.max()))
 print('Optimal No. of clusters: {}'.format(nc[np.argmax(silhouette)]))
 
 
-# In[29]:
-
-# Finding optimal number of clusters using the silhouette analysis
-# and DBSCAN clustering algorithm
-eps_values = np.linspace(1e-3, 1, 100)
-silhouette = []
-for e in eps_values:
-    model = DBSCAN(eps=e, min_samples=10)
-    model.fit(X)
-    labels = model.labels_
-    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-    if n_clusters > 1:
-        # Silhouette Coefficient analysis
-        cluster_labels = model.fit_predict(X)
-        silhouette_avg = silhouette_score(X, cluster_labels)
-        silhouette.append(silhouette_avg)
-silhouette = np.asarray(silhouette)
-print('No. clusters: {:d}, Best Silhouette Score: {:.4f}'.format(n_clusters,silhouette.max()))
-
-
-# In[30]:
-
-from cluster_metrics import gap_statistic, distortion_jump, max_CH_index
-
-
-# In[32]:
-
-# KMeans clustering model
-model = KMeans()
-# Optimal No. clusters using gap statistic method
-opt_gap = gap_statistic(X, model, k_max=10, metric='euclidean')
-print('Gap statistics Optimal No. of clusters: {}'.format(opt_gap))
-# Optimal No. clusters using distortion jump method
-opt_jump = distortion_jump(X, model, k_max=10, distortion_meth='euclidean')
-print('Distortion jump Optimal No. of clusters: {}'.format(opt_jump))
-# Optimal No. clusters using Calinski and Harabaz method
-opt_ch = max_CH_index(X, model, k_max=10)
-print('Calinski and Harabaz Optimal No. of clusters: {}'.format(opt_ch))
-
-
 # Silhouette analysis can be used to study the separation distance between the resulting clusters. Silhoette coefficients are in the range of [-1, 1], where the values near +1 indicate that the sample is far away from the neighboring clusters. A value of 0 indicates that the sample is on or very close to the decision boundary between two neighboring clusters and negative values indicate that those samples might have been assigned to the wrong cluster. The thickness of the silhouette plot determines the cluster size. The Silhouette Coefficient for a set of samples is given as the mean of the Silhouette Coefficient for each sample, where a higher Silhouette Coefficient score relates to a model with better defined clusters. 
 
 # In[18]:
@@ -1373,6 +1333,7 @@ ax.plot(forecast[:,0], forecast[:,1], c='green', ls='--', lw=2, marker='o',
         markersize=12, label='VAR prediction')
 ax.annotate(future.time(), xy=(forecast[-1,0], forecast[-1,1]), xycoords='data', 
             xytext=(10, 0), textcoords='offset points', size=14)
+#ax.add_patch(patches.Wedge((center_x[-1], center_y[-1]), d_mean, a_min, a_max, alpha=0.2))
 ax.legend(loc='upper left', frameon=False)
 ax.set_xlim(15.95, 16.23)
 ax.set_ylim(43.65, 43.81)
