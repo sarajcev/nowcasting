@@ -412,6 +412,25 @@ plt.show()
 
 # ### Lightning flash-cells identification
 
+# In[38]:
+
+# Diurnal lightning activity
+cg_poz_date = li.groupby(['type', 'pol']).get_group((1, 1))['ampl'].ix[date]
+cg_poz_num = cg_poz_date.resample('10min', how='count').fillna(0)
+cg_neg_date = li.groupby(['type', 'pol']).get_group((1, -1))['ampl'].ix[date]
+cg_neg_num = cg_neg_date.resample('10min', how='count').fillna(0)
+
+fig, ax = plt.subplots(figsize=(8,4.5))
+cg_poz_num.plot(color='royalblue', ls='-', lw=2, label='Positive CG strokes / 10 min', ax=ax)
+cg_neg_num.plot(color='red', ls='-', lw=2, label='Negative CG strokes / 10 min', ax=ax)
+ax.legend(loc='best')
+ax.set_ylabel('No. strokes / 10 min')
+ax.set_xlabel('Vrijeme (h)')
+ax.grid(True)
+plt.tight_layout()
+plt.show()
+
+
 # In[22]:
 
 # Hourly tracking of thunderstorm development
@@ -774,23 +793,6 @@ plt.savefig('cc_cg_ratio.png', dpi=300)
 plt.show()
 
 
-# In[38]:
-
-cg_poz_date = li.groupby(['type', 'pol']).get_group((1, 1))['ampl'].ix[date]
-cg_poz_num = cg_poz_date.resample('10min', how='count').fillna(0)
-cg_neg_date = li.groupby(['type', 'pol']).get_group((1, -1))['ampl'].ix[date]
-cg_neg_num = cg_neg_date.resample('10min', how='count').fillna(0)
-
-fig, ax = plt.subplots(figsize=(8,4.5))
-cg_poz_num.plot(color='royalblue', ls='-', lw=2, label='Positive CG strokes / 10 min', ax=ax)
-cg_neg_num.plot(color='red', ls='-', lw=2, label='Negative CG strokes / 10 min', ax=ax)
-ax.legend(loc='best')
-ax.set_ylabel('No. strokes / 10 min')
-ax.grid(True)
-plt.tight_layout()
-plt.show()
-
-
 # In[39]:
 
 cg_date = li.groupby('type').get_group(1).ix[date]
@@ -811,7 +813,7 @@ for k in range(len(time_frame)):
 
 # In[40]:
 
-# Select time frame from 11 h
+# Select time frame from 02 h
 selection = time_frame[positions[0]]
 lons_cg = cg_date['lon'].ix[selection]
 lats_cg = cg_date['lat'].ix[selection]
