@@ -39,7 +39,11 @@ warnings.filterwarnings('ignore')
 # Matplotlib
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.patches as patches
 from mpl_toolkits.basemap import Basemap
+from matplotlib.colors import ListedColormap
+from matplotlib.colorbar import ColorbarBase
 # Scikit-learn
 from sklearn.cluster import KMeans, MiniBatchKMeans, DBSCAN
 from sklearn.cluster import MeanShift, estimate_bandwidth
@@ -47,6 +51,8 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import pairwise, silhouette_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
+from sklearn.metrics import silhouette_samples, silhouette_score
+import hdbscan  # HDBSCAN algorithm
 # Scipy
 from scipy import interpolate
 from scipy import spatial
@@ -59,6 +65,7 @@ from shapely import affinity
 import statsmodels.api as sm
 # Folium maps
 import folium
+from folium.plugins import ImageOverlay
 # Others
 import numpy as np
 import pandas as pd
@@ -71,12 +78,10 @@ from math import modf
 # In[4]:
 
 # Seaborn style (figures)
-sns.set(context='notebook', style='whitegrid', font_scale=1.25)
+sns.set(context='notebook', style='whitegrid')
 sns.set_style('ticks', {'xtick.direction':'in', 'ytick.direction':'in'})
-
 # Folium
-folium.initialize_notebook()
-
+#folium.initialize_notebook()
 # Inline figures (matplotlib)
 get_ipython().magic(u'matplotlib inline')
 
@@ -116,7 +121,7 @@ for d, t in zip(date_li, time_li):
 # Create pandas dataframe
 # Type 1 refers to a cloud-to-ground stroke, type 2 to an in-cloud stroke
 li = pd.DataFrame({'lat': lat_li, 'lon': lon_li, 'type': type_li, 'ampl': ampl_li}, index=date_time)
-print(li.head())
+li.head()
 
 
 # In[6]:
@@ -171,7 +176,7 @@ wind_farm_3 = wind_farms[2]
 wind_farm_4 = wind_farms[3]
 
 
-# In[15]:
+# In[17]:
 
 clustered_view = False
 # Folium maps (lat-lon data)
@@ -194,11 +199,11 @@ for key, val in wind_farm_4.iteritems():
                   icon=folium.Icon(icon='info-sign', color='blue')).add_to(mapa)
 # Negative lightning
 for lat, lon, ampl in zip(lat_cg_neg, lon_cg_neg, ampl_neg):
-    folium.CircleMarker(location=[lat, lon], radius=abs(ampl), popup='{:.1f} kA'.format(ampl),
+    folium.features.Circle(location=[lat, lon], radius=abs(ampl), popup='{:.1f} kA'.format(ampl),
                         color='#ff6666', fill_color='#ff6666').add_to(mapa)
 # Positive lightning
 for lat, lon, ampl in zip(lat_cg_poz, lon_cg_poz, ampl_poz):
-    folium.CircleMarker(location=[lat, lon], radius=ampl, popup='{:.1f} kA'.format(ampl),
+    folium.features.Circle(location=[lat, lon], radius=ampl, popup='{:.1f} kA'.format(ampl),
                         color='#3186cc', fill_color='#3186cc').add_to(mapa)
 if clustered_view:
     # Clustered view of aggregated positive and negative lightning
@@ -206,10 +211,15 @@ if clustered_view:
     for lat, lon in zip(np.r_[lat_cg_neg, lat_cg_poz], np.r_[lon_cg_neg, lon_cg_poz]):
         #mapa.simple_marker(location=[lat, lon], clustered_marker=True)
         folium.Marker([lat, lon]).add_to(marker_cluster)
-mapa.create_map(path='lightning-map.html')
 
 
-# In[11]:
+# In[18]:
+
+# Save map as external html page
+mapa.save('lightning-map.html')
+
+
+# In[19]:
 
 # Terrain topography using data from NOAA
 # http://maps.ngdc.noaa.gov/viewers/wcs-client/
@@ -223,7 +233,7 @@ XT, YT = np.meshgrid(xi, yi)
 ZT = interpolate.griddata((x, y), z, (XT, YT), method='cubic')
 
 
-# In[12]:
+# In[20]:
 
 def colorize(array, cmap='rainbow'):
     normed_data = (array - array.min()) / (array.max() - array.min())
@@ -233,7 +243,7 @@ def colorize(array, cmap='rainbow'):
 colored_data = colorize(ZT, cmap='terrain')
 
 
-# In[13]:
+# In[21]:
 
 date = '2014-09-01'
 cg_date = li.groupby('type').get_group(1).ix[date]
@@ -242,14 +252,12 @@ time_frame = [date + ' ' + '0' + str(x) for x in range(1, 10)]
 time_frame += [date + ' ' + str(x) for x in range(10, 20)]
 
 
-# In[14]:
+# In[22]:
 
 len(li.ix[date])
 
 
-# In[15]:
-
-from folium.plugins import ImageOverlay
+# In[24]:
 
 # Interactive map of lighting activity on 2014-09-01
 tileset = r'http://{s}.tile.thunderforest.com/cycle/{z}/{x}/{y}.png'  #Thunderforrest
@@ -263,7 +271,8 @@ lat_09_01 = cg_neg['lat'].ix[date]
 ampl_09_01 = cg_neg['ampl'].ix[date]
 time_neg = cg_neg.ix[date].index
 for lat, lon, ampl, time in zip(lat_09_01, lon_09_01, ampl_09_01, time_neg):
-    folium.CircleMarker(location=[lat, lon], radius=abs(ampl), popup='{:s}, I = {:.1f} kA'.format(str(time), ampl),
+    # CircleMarker displays circle with radius in pixels
+    folium.features.Circle(location=[lat, lon], radius=abs(ampl), popup='{:s}, I = {:.1f} kA'.format(str(time), ampl),
                         color='#ff6666', fill_color='#ff6666').add_to(mapa)
 # Positive CG lightning
 lon_09_01 = cg_poz['lon'].ix[date]
@@ -271,11 +280,11 @@ lat_09_01 = cg_poz['lat'].ix[date]
 ampl_09_01 = cg_poz['ampl'].ix[date]
 time_poz = cg_poz.ix[date].index
 for lat, lon, ampl, time in zip(lat_09_01, lon_09_01, ampl_09_01, time_poz):
-    folium.CircleMarker(location=[lat, lon], radius=ampl, popup='{:s}, I = {:.1f} kA'.format(str(time), ampl),
+    folium.features.Circle(location=[lat, lon], radius=ampl, popup='{:s}, I = {:.1f} kA'.format(str(time), ampl),
                         color='#3186cc', fill_color='#3186cc').add_to(mapa)
 # CC lightning
 for lat, lon, amp, time in zip(lat_cc.ix[date], lon_cc.ix[date], amp_cc.ix[date], amp_cc.ix[date].index):
-    folium.CircleMarker(location=[lat,lon], radius=amp, popup='{:s}, I = {:.1f} kA'.format(str(time), amp),
+    folium.features.Circle(location=[lat,lon], radius=amp, popup='{:s}, I = {:.1f} kA'.format(str(time), amp),
                         color='seagreen', fill_color='seagreen').add_to(mapa)
 # Display map
 mapa
@@ -283,7 +292,7 @@ mapa
 
 # ### Lightning density distribution
 
-# In[16]:
+# In[25]:
 
 # Kerenel density estimation of lat-lon lightning distribution using scikit-learn
 def scikit_bivariate_kde(x, y, algo='auto', kernel='gaussian', metric='euclidean', gridsize=100, cut=3):
@@ -326,24 +335,24 @@ def select_bandwidth(data):
     return grid.best_params_['bandwidth']
 
 
-# In[17]:
+# In[26]:
 
 # Aggregate neg. and pos. lightning data
 lon_cg = np.r_[lon_cg_neg, lon_cg_poz]
 lat_cg = np.r_[lat_cg_neg, lat_cg_poz]
 
 
-# In[18]:
+# In[27]:
 
-# Bivariate KDE in spherical geometry
+# Bivariate KDE in spherical geometry (can be CPU intensive!)
 lon, lat, data = scikit_bivariate_kde(lon_cg, lat_cg, algo='ball_tree', kernel='gaussian', 
                                       metric='haversine', gridsize=100, cut=3)
 
 
-# In[19]:
+# In[28]:
 
 # Basemap plotting of KDE of lightning data lon-lat values
-fig = plt.figure(figsize=(10, 8))
+fig = plt.figure(figsize=(10,8))
 m = Basemap(projection='merc', ellps='WGS84', lat_0=43.5, lon_0=16, resolution='h', area_thresh=0.1,
             llcrnrlon=lon_cg.min(), llcrnrlat=lat_cg.min(), urcrnrlon=lon_cg.max(), urcrnrlat=lat_cg.max())
 m.drawcoastlines()
@@ -369,7 +378,7 @@ plt.tight_layout()
 plt.show()
 
 
-# In[20]:
+# In[29]:
 
 colored_lgtn = colorize(data, cmap='viridis')
 tileset = r'http://{s}.tile.thunderforest.com/cycle/{z}/{x}/{y}.png'  #Thunderforrest
@@ -380,10 +389,10 @@ ImageOverlay(np.flipud(colored_lgtn), bounds=[[43.6, 15.85], [43.8,  16.25]], op
 mapa
 
 
-# In[21]:
+# In[30]:
 
 # Basemap *terrain & KDE* of lightning data lon-lat values
-fig = plt.figure(figsize=(10, 8))
+fig = plt.figure(figsize=(10,8))
 m = Basemap(projection='merc', ellps='WGS84', lat_0=43.5, lon_0=16, resolution='h', area_thresh=0.1,
             llcrnrlon=lon_cg.min(), llcrnrlat=lat_cg.min(), urcrnrlon=lon_cg.max(), urcrnrlat=lat_cg.max())
 m.drawcoastlines()
@@ -412,7 +421,7 @@ plt.show()
 
 # ### Lightning flash-cells identification
 
-# In[38]:
+# In[31]:
 
 # Diurnal lightning activity
 cg_poz_date = li.groupby(['type', 'pol']).get_group((1, 1))['ampl'].ix[date]
@@ -431,7 +440,7 @@ plt.tight_layout()
 plt.show()
 
 
-# In[22]:
+# In[32]:
 
 # Hourly tracking of thunderstorm development
 times = []  # hours
@@ -444,10 +453,7 @@ for k in range(len(time_frame)):
         times.append(time_frame[k])
 
 
-# In[23]:
-
-from matplotlib.colors import ListedColormap
-from matplotlib.colorbar import ColorbarBase
+# In[33]:
 
 # There are four hours with intensive lightning activity
 labels = [x[-2:]+':00 h' for x in times]
@@ -547,7 +553,7 @@ print('The average Silhouette Coefficient is: {:.4f}'.format(silhouette_avg))
 
 # In[36]:
 
-fig, ax = plt.subplots(figsize=(10, 7))
+fig, ax = plt.subplots(figsize=(8,6))
 sns.kdeplot(lons, lats, shade=False, shade_lowest=False, cmap=plt.cm.get_cmap('Blues'), ax=ax)       
 ax.scatter(lons, lats, s=20, c='blue', label=lab, alpha=0.4)
 colors = plt.cm.winter(np.linspace(0, 1, n_clusters))  # generate colours
@@ -568,7 +574,7 @@ ax.set_ylim(43.65, 43.81)
 plt.show()
 
 
-# In[26]:
+# In[37]:
 
 # Finding optimal number of clusters using the silhouette analysis
 # and Gaussian Mixture Models clustering algorithm (GaussianMixture)
@@ -589,14 +595,13 @@ print('Optimal No. of clusters: {}'.format(nc[np.argmax(silhouette)]))
 
 # Silhouette analysis can be used to study the separation distance between the resulting clusters. Silhoette coefficients are in the range of [-1, 1], where the values near +1 indicate that the sample is far away from the neighboring clusters. A value of 0 indicates that the sample is on or very close to the decision boundary between two neighboring clusters and negative values indicate that those samples might have been assigned to the wrong cluster. The thickness of the silhouette plot determines the cluster size. The Silhouette Coefficient for a set of samples is given as the mean of the Silhouette Coefficient for each sample, where a higher Silhouette Coefficient score relates to a model with better defined clusters. 
 
-# In[18]:
+# In[38]:
 
 # Silhouette analysis of the number of clusters
-from sklearn.metrics import silhouette_samples, silhouette_score
 # http://scikit-learn.org/stable/auto_examples/
 # cluster/plot_kmeans_silhouette_analysis.html
 # #example-cluster-plot-kmeans-silhouette-analysis-py
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10,5))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8,4))
 colors = plt.cm.winter(np.linspace(0, 1, n_clusters))  # generate colours
 if n_clusters > 0:
     y_lower = 10
@@ -645,7 +650,7 @@ plt.show()
 
 # Clustering algorithms introduced above will assign *every point* to some of the formed clusters, as can be seen from the figure above. At the same time, it is clear that some of the points are outliers to the formed clusters. It would be appreciated if these points could be removed and clusters formed only from tightly packed points. The distance metric can be used as a measure for detecting and removing these outliers. 
 
-# In[19]:
+# In[39]:
 
 # Removing outlier data points from the clusters
 # using quantile treshold and cluster centers
@@ -677,7 +682,7 @@ plt.show()
 
 # Usually thunderstorms behave differently depending on the scale of analysis: individual cells generally move in several directions while the whole convective system moves in one preferred direction. Thus, using the hierarchical clustering, the tracking of convective systems may be carried out on different levels. Dendrogram can be used to estimate the optimal number of clusters in hierarchical clustering.
 
-# In[20]:
+# In[40]:
 
 # Hierarchical clustering using Scipy
 z_d = hierarchy.linkage(X, method='ward', metric='euclidean')
@@ -691,17 +696,17 @@ plt.savefig('dendrogram.png', dpi=300)
 plt.show()
 
 
-# In[21]:
+# In[41]:
 
 # Define clusters from distance metric 
-max_dist = 0.7  # from dendrogram
+max_dist = 0.75  # from dendrogram
 clusters = hierarchy.fcluster(z_d, max_dist, criterion='distance')
 # No. of clusters
 n_clusters = len(np.unique(clusters))
 print('No. clusters: {:d}'.format(n_clusters))
 
 
-# In[22]:
+# In[42]:
 
 # Compute DBSCAN - Density-Based Spatial Clustering of Applications with Noise
 # This algorithm does not assign all points to all clusters and does not need
@@ -716,7 +721,7 @@ labels = db.labels_
 n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
 print('Estimated number of clusters (DBSCAN): {:g}'.format(n_clusters_))
 
-fig, ax = plt.subplots(figsize=(10,7))
+fig, ax = plt.subplots(figsize=(8,6))
 ax.scatter(lons, lats, s=20, c='blue', label=lab, alpha=0.4)
 sns.kdeplot(lons, lats, shade=False, shade_lowest=False, cmap=plt.cm.get_cmap('Blues'), ax=ax)
 unique_labels = set(labels)
@@ -751,11 +756,46 @@ plt.savefig('dbscan_hulls.png', dpi=300)
 plt.show()
 
 
+# In[43]:
+
+# HDBSCAN - Hierarchical Density-Based Spatial Clustering of Applications with Noise
+# This algorithm does not assign all points to all clusters and does not need
+# external outlier detection; it also does not need the number of clusters as
+# input value (see documentation at https://hdbscan.readthedocs.io/en/latest/basic_hdbscan.html)
+hdb = hdbscan.HDBSCAN(min_cluster_size=15)
+hdb.fit(X)
+
+print('Estimated number of clusters (HDBSCAN): {:g}'.format(hdb.labels_.max()+1))
+color_palette = sns.color_palette('deep', 8)
+cluster_colors = [color_palette[x] if x >= 0 else (0.5, 0.5, 0.5) for x in hdb.labels_]
+cluster_member_colors = [sns.desaturate(x, p) for x, p in zip(cluster_colors, hdb.probabilities_)]
+
+fig, ax = plt.subplots(figsize=(8,6))
+sns.kdeplot(lons, lats, shade=False, shade_lowest=False, cmap=plt.cm.get_cmap('Blues'), ax=ax)
+plt.scatter(*X.T, s=50, linewidth=0, c=cluster_member_colors, alpha=0.5)
+# Flash-cell poligon can be created using convex hull with the cluster points
+# Convex hull is the smallest convex object containing all points in a given point set
+unique_labels = set(hdb.labels_)
+for k in unique_labels:
+    class_member_mask = (labels == k)
+    if k != -1:  # for clusters only
+        cluster_points = X[class_member_mask]
+        hull = spatial.ConvexHull(cluster_points)
+        for simplex in hull.simplices:
+            ax.plot(cluster_points[simplex,0], cluster_points[simplex,1], c='k', ls='-', lw=2)    
+ax.set_xlabel('longitude')
+ax.set_ylabel('latitude')
+ax.set_xlim(15.89, 16.21)
+ax.set_ylim(43.65, 43.81)
+plt.tight_layout()
+plt.show()
+
+
 # ### Lightning flash-cells movement tracking
 
 # Lightning activity recorded by LINET can be used for tracking (and even possibly predicting) the development and movement of thunderstorms. With direct access to the LINET servers this could be done in near real-time (large areas need to be monitored due to the extent of thunderstorms). It is based on recognizing the thunderstorm cells (from recorded CG and CC lightning activity) and their temporal evolution and movement. Here, a simple approach to the tracking of thunderstorm development during a single day is demonstrated for the date: 2014-09-01, using this dataset which covers a small surface area.
 
-# In[37]:
+# In[44]:
 
 date = '2014-09-01'
 
@@ -793,7 +833,7 @@ plt.savefig('cc_cg_ratio.png', dpi=300)
 plt.show()
 
 
-# In[39]:
+# In[45]:
 
 cg_date = li.groupby('type').get_group(1).ix[date]
 cc_date = li.groupby('type').get_group(2).ix[date]
@@ -811,7 +851,7 @@ for k in range(len(time_frame)):
         times.append(time_frame[k])
 
 
-# In[40]:
+# In[46]:
 
 # Select time frame from 02 h
 selection = time_frame[positions[0]]
@@ -825,7 +865,7 @@ lats = np.r_[lats_cg, lats_cc]
 X = np.c_[lons, lats]
 
 
-# In[41]:
+# In[47]:
 
 # CG lightning activity in 10 min. intervals
 lons_cg.resample('10min', how='count').dropna().plot(kind='bar', color='royalblue', label='CG', alpha=0.5)
@@ -838,14 +878,14 @@ plt.show()
 
 # From the centers of clusters, as identified by the kernel density estimation and machine learning algorithm, the thunderstorm cells can be formed and temporal-evolution of their movement tracked. The method for cell tracking searches for event clusters and defines the border of a cell by means of the stroke density. A cell is suspected when the number of strokes per area surpasses a set minimum, and likewise the border is recognized when the absolute stroke number falls below this minimum. For each recognised cell area, a polygon can be drawn which serves to visually identify the thunderstorm cell.
 
-# In[42]:
+# In[48]:
 
 # Tracking thunderstorm movement using clustering algorithm
 center_x = []
 center_y = []
 time_var = []
 fraction = 0.9  # cluster seed selection criterion
-show_cluster_members = False
+show_cluster_members = True
 mins = pd.date_range(start=selection, periods=7, freq='10min')  # one hour time window
 for k in range(len(mins)-1):
     lons_ = lons_cg.ix[mins[k]:mins[k+1]]
@@ -902,7 +942,7 @@ for k in range(len(mins)-1):
         plt.show()
 
 
-# In[43]:
+# In[49]:
 
 for k in range(len(mins)-1):
     lons_ = lons_cg.ix[mins[k]:mins[k+1]]
@@ -959,7 +999,7 @@ for k in range(len(mins)-1):
         plt.show()
 
 
-# In[44]:
+# In[50]:
 
 fig, ax = plt.subplots(figsize=(10,7))
 # Convex hulls from flash-cell identification
@@ -989,7 +1029,7 @@ plt.show()
 
 # Convex hull, defined from cluster points, can be converted into the Polygon using the Shapely library. Then, that polygon data can be transformed (exported) into the GeoJson format and graphically presented on the Folium map. Shapely library can be used for all kinds of shape and polygon manipulations, including translation, analysis of shape overlappings, unions, and intersections. This can be usefull in identifying flash-cell **merge and split** conditions.
 
-# In[45]:
+# In[54]:
 
 # Convex hulls on a folium map
 color_dark = lambda feature: {'fillColor':'#1952E3', 'color':'#1952E3', 'fillOpacity':0.8}
@@ -1012,12 +1052,12 @@ folium.GeoJson(t2_geo, style_function=color_light).add_to(mapa)
 folium.GeoJson(trans_geo, style_function=color_medium).add_to(mapa)
 folium.GeoJson(geo_poly, style_function=color_dark).add_to(mapa)
 # Alarm zone (example)
-mapa.circle_marker(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
-                   line_color='red', fill_color='red')
+folium.features.Circle(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
+                   color='red', fill_color='red').add_to(mapa)
 mapa
 
 
-# In[46]:
+# In[55]:
 
 # Convex hulls on a folium map
 color_blue = lambda feature: {'fillColor':'royalblue', 'color':'royalblue', 'fillOpacity':0.5}
@@ -1032,13 +1072,12 @@ for i, h in enumerate(np.arange(2, 6, 1)):
 coordinates = zip(center_y, center_x)
 folium.PolyLine(locations=coordinates, color='navy', weight=10, opacity=0.6).add_to(mapa)
 # Alarm zone (example)
-
-folium.CircleMarker(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
-                    color='red', fill_color='red').add_to(mapa)
+folium.features.Circle(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
+                   color='red', fill_color='red').add_to(mapa)
 mapa
 
 
-# In[47]:
+# In[56]:
 
 mapa = folium.Map(location=[43.75, 16.0], zoom_start=11)
 with open('hulls_5.p', 'rb') as fp:
@@ -1058,14 +1097,12 @@ folium.GeoJson(geo_poly, style_function=color_dark).add_to(mapa)
 # Track of thunderstorm movement
 folium.PolyLine(locations=coordinates, color='navy', weight=10, opacity=0.6).add_to(mapa)
 # Alarm zone (example)
-folium.CircleMarker(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
-                    color='red', fill_color='red').add_to(mapa)
+folium.features.Circle(location=[43.860372, 16.15526], radius=4000, popup='Drnis alarm zone',
+                   color='red', fill_color='red').add_to(mapa)
 mapa
 
 
-# In[44]:
-
-import matplotlib.dates as mdates
+# In[59]:
 
 area = []
 no_points = []
@@ -1077,7 +1114,7 @@ for h in np.arange(2, 6, 1):
 
 dens = [p/a for a, p in zip(area, no_points)]
 
-fig, ax = plt.subplots(figsize=(9,5))
+fig, ax = plt.subplots(figsize=(8,4))
 r_ax = ax.twinx()
 r2_ax = ax.twinx()
 fig.subplots_adjust(right=0.75)
@@ -1098,10 +1135,10 @@ plt.savefig('three_axis.png', dpi=300)
 plt.show()
 
 
-# In[35]:
+# In[61]:
 
 # Path of the flash-cell movement
-fig, ax = plt.subplots(figsize=(12,7))
+fig, ax = plt.subplots(figsize=(9,5))
 cs = ax.contourf(XT, YT, ZT, 30, cmap=plt.cm.get_cmap('terrain'), alpha=0.5)
 plt.colorbar(cs, orientation='vertical', pad=0.02)
 ax.plot(center_x, center_y, color='darkred', ls='--', lw=2, marker='o', markersize=12)
@@ -1119,7 +1156,7 @@ plt.show()
 
 # Using the Haversine distance between cluster centers and time interval (10 minutes) a speed of cluster movement can be determined for each successive time step. Using the Weighted Least Squares Analysis with several (three to four) time steps, a general direction of the cluster movement can be establised (including confidence and prediction levels). Weights are determined in such a manner as to favor the latest time instance possitions and cluster speeds. Nowcasting establishes probable location of the cluster center (after the next 10 minute interval) using the weighted average speed and weighted average angle of cluster center movement between succesive time instances.
 
-# In[36]:
+# In[62]:
 
 delta = 10.  # 10 min. interval
 
@@ -1163,7 +1200,7 @@ elif geometry == 'haversine':
         alpha.append(angle)
 
 
-# In[37]:
+# In[63]:
 
 # weights (more recent time instances have larger weights)
 w = np.arange(1, len(v)+1, 1)
@@ -1186,7 +1223,7 @@ a_max = a_mean + 2.*a_std
 
 # #### Linear Regression using Weighted Least Squares (WLS) Analysis 
 
-# In[38]:
+# In[64]:
 
 # Weights for the WLS analysis
 w = np.arange(0, len(center_x)+1, 1)
@@ -1203,7 +1240,7 @@ elif weight == 'exp':
     w = w[1:]
 
 
-# In[39]:
+# In[65]:
 
 X = np.c_[np.ones(len(center_x)), center_x]
 y = center_y
@@ -1213,7 +1250,7 @@ res_ols = model_ols.fit()
 res_ols.summary()
 
 
-# In[40]:
+# In[66]:
 
 # New data for the prediction
 support = np.linspace(16.0, 16.25, 50)
@@ -1221,7 +1258,7 @@ xnew = np.c_[np.ones(support.size), support]  # must be a 2D array
 out_ols = res_ols.predict(xnew)
 
 
-# In[41]:
+# In[67]:
 
 # Confidance intervals for WLS using bootstrap method
 alpha = 0.05  # 95% confidence interval
@@ -1252,7 +1289,7 @@ ci_lows = np.percentile(values, ql, axis=0, interpolation='midpoint')
 ci_higs = np.percentile(values, qh, axis=0, interpolation='midpoint')
 
 
-# In[42]:
+# In[68]:
 
 from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
@@ -1260,9 +1297,7 @@ from statsmodels.sandbox.regression.predstd import wls_prediction_std
 prstd, iv_l, iv_u = wls_prediction_std(res_ols, exog=xnew, alpha=0.05)  # notice the exog parameter
 
 
-# In[43]:
-
-import matplotlib.patches as patches
+# In[69]:
 
 # Nowcasting flash-cell position
 future = time_var[-1] + dt.timedelta(minutes=10)
@@ -1297,27 +1332,27 @@ plt.show()
 
 # #### Vector Autoregression (VAR) analysis
 
-# In[52]:
+# In[70]:
 
 dataf = pd.DataFrame({'x':center_x, 'y':center_y}, index=time_var)
 dataf
 
 
-# In[53]:
+# In[71]:
 
 # Vector Autoregression Analysis (VAR) 
 var_model = sm.tsa.VAR(dataf).fit(1)  # lag order
 
 
-# In[54]:
+# In[72]:
 
 # Forecasting movement from the VAR model
 forecast = var_model.forecast(dataf.values[:-1], 2)  # one step into future
 
 
-# In[65]:
+# In[73]:
 
-fig, ax = plt.subplots(figsize=(12,7))
+fig, ax = plt.subplots(figsize=(10,6))
 cs = ax.contourf(XT, YT, ZT, 30, cmap=plt.cm.get_cmap('terrain'), alpha=0.5)
 plt.colorbar(cs, orientation='vertical', pad=0.02)
 # Weighted least squares
@@ -1344,7 +1379,7 @@ ax.set_ylabel('latitude')
 plt.show()
 
 
-# In[60]:
+# In[74]:
 
 # Weighted combination of WLS and VAR model predictions
 weight = 0.5
